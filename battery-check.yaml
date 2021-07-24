@@ -1,0 +1,86 @@
+blueprint:
+  name: Low battery level detection & notification for all battery sensors
+  description: Regularly test all sensors with 'battery' device-class for crossing
+    a certain battery level threshold and if so execute an action.
+  domain: automation
+  input:
+    threshold:
+      name: Battery warning level threshold
+      description: Battery sensors below threshold are assumed to be low-battery.
+      default: 20
+      selector:
+        number:
+          min: 5.0
+          max: 100.0
+          unit_of_measurement: '%'
+          mode: slider
+          step: 5.0
+    time:
+      name: Time to test on
+      description: Test is run at configured time
+      default: '10:00:00'
+      selector:
+        time: {}
+    day:
+      name: Weekday to test on
+      description: 'Test is run at configured time either everyday (0) or on a given
+        weekday (1: Monday ... 7: Sunday)'
+      default: 0
+      selector:
+        number:
+          min: 0.0
+          max: 7.0
+          mode: slider
+          step: 1.0
+    exclude:
+      name: Excluded Sensors
+      description: Battery sensors (e.g. smartphone) to exclude from detection.
+        Only entities are supported, devices must be expanded!
+      default: {entity_id: []}
+      selector:
+        target:
+          entity:
+            device_class: battery    
+variables:
+  day: !input 'day'
+  threshold: !input 'threshold'
+  exclude: !input 'exclude'
+  counttotal: "{{ states.sensor \
+| selectattr('attributes.device_class','eq','battery') \
+| sort(attribute='state') | rejectattr('state', 'in', ['0', '100']) \
+| list | count }}"
+  countlow: "{{ states.sensor \
+| selectattr('attributes.device_class','eq','battery') \
+| sort(attribute='state') | rejectattr('state', 'in', ['0', '100']) \
+| selectattr('state', 'lessthan', threshold|string) | list | count }}"
+  listtextlow: "{% for batt in states.sensor \
+| selectattr('attributes.device_class','eq','battery') \
+| sort(attribute='state') \
+| rejectattr('state', 'in', ['0', '100']) \
+| selectattr('state', 'lessthan', threshold|string) \
+| list -%}
+{{ batt.attributes.entity_id }}
+{{ batt.attributes.friendly_name }} is {{ batt.state }}% 
+
+{% endfor %}"
+  notification_message: "{% if countlow > 0 -%}{{countlow}} out of \
+{{ counttotal }} device batteries are low:
+
+{{listtextlow}}
+{%- else -%}
+All {{counttotal}} device batteries are ok!
+{% endif %}"
+trigger:
+- platform: time
+  at: !input 'time'
+condition:
+- condition: template
+  value_template: '{{ sensors != '''' and (day | int == 0 or day | int == now().isoweekday())
+    }}'
+action:
+- service: persistent_notification.create
+  data:
+    title: 'Battery Check'
+    message: '{{ notification_message }}'
+    notification_id: battery-check
+{"mode":"full","isActive":false}
