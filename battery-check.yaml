@@ -83,4 +83,4 @@ action:
     title: 'Battery Check'
     message: '{{ notification_message }}'
     notification_id: battery-check
-{"mode":"full","isActive":false}
+mode: single
